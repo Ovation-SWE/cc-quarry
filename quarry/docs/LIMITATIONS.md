@@ -149,3 +149,31 @@ move, infer facing from the delta) is implemented and unit-tested, but
 `worker.lua` does not currently call it automatically anywhere (e.g.
 during `RECOVERING`) -- it's available as a building block for a more
 autonomous recovery flow but isn't part of the current state machine.
+
+## The GUI's rendering/interaction layer is not covered by the "no Minecraft needed" test suite
+
+Every other claim in this project is backed by a test running against
+a deterministic mock, with no Minecraft instance required. `master/gui.lua`
+only partially fits that pattern: `tests/test_master_gui.lua` verifies
+its *logic* (config parsing, deploy/start/pause/cancel wiring into
+`lib/*.lua`) against `tests/mocks/basalt_mock.lua`, a fake widget tree
+with no real rendering. It cannot verify the real Basalt2 library's
+actual behavior -- layout correctness, whether a given API call
+(`:addTable`, `:onSelect`, the confirm-modal overlay, etc.) matches
+what basalt2.5 actually does at runtime, or whether it behaves
+correctly on a real turtle/computer terminal. That part was verified
+by reading Basalt2's source and docs (see `master/gui.lua`'s header
+comment and bootstrap.lua's install step), not by an automated test,
+and should be smoke-tested in-game after first install. If something
+about the GUI doesn't render or respond as expected, `master.lua` (the
+text UI) is always available as a fallback -- see README.md's "GUI vs.
+text UI".
+
+## The GUI's Setup tab has the same `BLOCK_LIQUID` gap as the CLI wizard
+
+Like `master.lua`'s `new` command (see "`BLOCK_LIQUID` needs
+`sealBlockSlot`..." above), the GUI's Setup tab does not expose
+`sealBlockSlot`. Choosing the `BLOCK_LIQUID` liquid policy through
+either UI leaves it unset, which fails safely (a reported
+`CONFIGURATION_ERROR`, not a crash) but requires editing the saved
+`master_state` configuration directly to actually use that policy.

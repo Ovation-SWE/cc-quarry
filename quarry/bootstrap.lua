@@ -8,9 +8,9 @@
 --   wget run https://raw.githubusercontent.com/Ovation-SWE/cc-quarry/main/quarry/bootstrap.lua master
 
 local BASE_URL = "https://raw.githubusercontent.com/Ovation-SWE/cc-quarry/main/quarry/"
+local BASALT_URL = "https://raw.githubusercontent.com/Pyroxenium/Basalt2/refs/heads/basalt2.5/bundle/basalt.lua"
 
-local function fetch(path)
-  local url = BASE_URL .. path
+local function fetchUrl(url)
   local response, err = http.get(url)
   if not response then
     error(("failed to fetch %s: %s"):format(url, err or "unknown error"))
@@ -18,6 +18,10 @@ local function fetch(path)
   local body = response.readAll()
   response.close()
   return body
+end
+
+local function fetch(path)
+  return fetchUrl(BASE_URL .. path)
 end
 
 local function writeFile(path, contents)
@@ -57,6 +61,17 @@ for _, relPath in ipairs(files) do
   local dest = relPath:match("^" .. role .. "/(.+)$") or relPath
   print("  " .. relPath .. " -> " .. dest)
   writeFile(dest, fetch(relPath))
+end
+
+if role == "master" then
+  print("Fetching Basalt2 (GUI library) from " .. BASALT_URL .. " ...")
+  local ok, result = pcall(fetchUrl, BASALT_URL)
+  if ok then
+    writeFile("basalt.lua", result)
+    print("  basalt.lua installed; master/startup.lua will launch the GUI.")
+  else
+    print("  Basalt2 fetch failed (" .. tostring(result) .. "); falling back to the text UI.")
+  end
 end
 
 print("Install complete. Rebooting in 2 seconds...")

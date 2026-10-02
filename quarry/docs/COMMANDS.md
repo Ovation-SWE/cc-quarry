@@ -4,6 +4,27 @@ Run on the master computer (`master.lua`, auto-started by
 `startup.lua`). Type `help` at the `quarry>` prompt for a short
 summary at any time.
 
+## GUI equivalent
+
+Everything below also exists as a point-and-click GUI
+(`master/gui.lua`, built on [Basalt2](https://github.com/Pyroxenium/Basalt2)),
+which `startup.lua` launches automatically on an Advanced Computer
+with `basalt.lua` installed -- see README.md's "GUI vs. text UI" and
+`docs/SETUP.md`. The table below maps each CLI command to its GUI
+location:
+
+| Command | GUI location |
+|---|---|
+| `new`, `show` | Setup tab: form fields, pre-filled from the last saved config |
+| `validate` | Setup tab: Validate button |
+| `partition` | Setup tab: Partition button |
+| `dryrun` | Setup tab: Dry Run button |
+| `deploy`, `start` | Deploy tab: Deploy / Start buttons (confirm modal instead of typing `CONFIRM`) |
+| `pause`, `resume` | Status tab: Pause / Resume buttons |
+| `cancel`, `estop` | Status tab: Cancel / ESTOP buttons (confirm modal) |
+| `status`, `worker <id>` | Status tab: live table; click a row for that worker's detail |
+| `save`, `recover`/`load` | Automatic: every GUI action that changes state saves immediately; session is reloaded on launch |
+
 | Command | Effect |
 |---|---|
 | `new` | Interactive wizard to configure a new quarry. Overwrites any in-progress (not yet deployed) draft configuration and clears any previously computed partitions. |

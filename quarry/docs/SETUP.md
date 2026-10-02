@@ -17,6 +17,13 @@ to move). Requires:
   block placed adjacent to the computer, or peripheral-attached).
 - Optionally a disk drive peripheral, if this computer will double as
   the worker-deployment station (see "Worker provisioning" below).
+- **An Advanced Computer (gold-colored), if you want the GUI**
+  (`master/gui.lua`, built on Basalt2 -- see README.md's "GUI vs. text
+  UI"). Basalt needs a color terminal and mouse input, neither of
+  which a basic Computer has; `startup.lua` detects this automatically
+  (`term.isColour()`) and falls back to the text UI (`master.lua`) on
+  a basic Computer, so a basic Computer still works fine, just without
+  the GUI.
 
 **Each worker:** a Mining Turtle (has a built-in pickaxe) or a regular
 turtle with a pickaxe equipped via `turtle.equipLeft()`/`equipRight()`

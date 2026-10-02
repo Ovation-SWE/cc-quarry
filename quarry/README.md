@@ -15,8 +15,15 @@ required to verify this system's correctness.**
 
 ```
 lua tests/run_all.lua      # from the quarry/ directory
-# -> TOTAL: 80052 checks, 0 failures across 12 files
+# -> TOTAL: 80084 checks, 0 failures across 13 files
 ```
+
+The master also has a point-and-click GUI (`master/gui.lua`, built on
+[Basalt2](https://github.com/Pyroxenium/Basalt2)) covering every step
+-- Setup, Deploy, and a live Status dashboard -- for anyone who'd
+rather not type commands. It installs automatically alongside the
+text UI and launches by default on an Advanced Computer; see "GUI vs.
+text UI" below.
 
 ## Quick start
 
@@ -33,10 +40,22 @@ lua tests/run_all.lua      # from the quarry/ directory
    `dryrun` (check where to place turtles), physically place each
    worker turtle facing north at its printed starting position, then
    `deploy` and `start`.
-4. Watch progress with `status` / `worker <id>`.
+4. Watch progress with `status` / `worker <id>` (or the Status tab, in the GUI).
 
 Full command reference: `docs/COMMANDS.md`. Configuration field
 reference: `docs/CONFIG_REFERENCE.md`.
+
+## GUI vs. text UI
+
+`master/startup.lua` launches `gui.lua` automatically if `basalt.lua`
+got installed (the bootstrap command fetches it for the master role
+whenever `http` is enabled) **and** the computer is an Advanced
+Computer (`term.isColour()`) -- Basalt needs color and mouse input,
+which basic computers don't have. Otherwise it falls back to the text
+UI (`master.lua`). You can always launch either one by hand regardless
+of what auto-started: run `gui` or `master` at the shell prompt. Both
+read/write the same `master_state` session file, so switching between
+them mid-job is safe.
 
 ## Repository layout
 
@@ -67,8 +86,9 @@ quarry/
     worker.lua            Worker state machine, wires together lib/*
 
   master/
-    startup.lua          Tiny boot shim
-    master.lua            Command UI, partitioning, deployment, monitoring
+    startup.lua          Tiny boot shim; picks gui.lua or master.lua (see README)
+    master.lua            Text command UI, partitioning, deployment, monitoring
+    gui.lua                Point-and-click UI (Basalt2), same lib/* underneath
 
   tools/
     provision_disk.lua    Worker deployment station helper (disk drive)
@@ -78,7 +98,8 @@ quarry/
       world.lua           In-memory turtle + block-world simulator
       rednet_bus.lua       In-memory multi-node rednet substitute
       fs_mock.lua           Real-filesystem-backed fs API mock
-    test_*.lua              12 test files, ~80k assertions total
+      basalt_mock.lua       Fake Basalt widget tree (see gui.lua's header)
+    test_*.lua              13 test files, ~80k assertions total
     run_all.lua              Convenience runner + summary
 
   config/

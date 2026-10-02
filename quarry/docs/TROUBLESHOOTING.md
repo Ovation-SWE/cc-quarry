@@ -1,5 +1,35 @@
 # Troubleshooting Guide
 
+## The GUI doesn't launch; I just get the text UI (`quarry>` prompt)
+
+`startup.lua` only launches `gui.lua` when **both** `basalt.lua` and
+`gui.lua` exist on the computer **and** `term.isColour()` is true.
+Check which is missing:
+1. `ls` at the root -- if `basalt.lua` is absent, the bootstrap
+   install's Basalt fetch likely failed (it prints a warning and
+   continues rather than aborting the whole install -- re-run
+   `wget run https://raw.githubusercontent.com/Ovation-SWE/cc-quarry/main/quarry/bootstrap.lua`
+   and watch for a "Basalt2 fetch failed" line).
+2. If both files exist, this is a basic Computer, not an Advanced
+   Computer -- Basalt needs color + mouse, which basic Computers don't
+   have. Either accept the text UI, or move the setup to an Advanced
+   Computer.
+3. You can always launch either UI manually regardless of what
+   auto-started: run `gui` or `master` at the shell prompt.
+
+## The GUI launches but a widget looks wrong or a button does nothing
+
+This project's test suite verifies `gui.lua`'s *logic* against a fake
+widget tree (`tests/mocks/basalt_mock.lua`), not Basalt2's real
+rendering -- see `docs/LIMITATIONS.md`'s GUI entry. If something looks
+or behaves wrong in-game, it's most likely a mismatch between the
+Basalt2 API version actually installed and what `gui.lua` assumes
+(basalt2.5; see `master/gui.lua`'s header comment for why that
+specific branch matters -- Basalt2's `main` branch has a different,
+incompatible API). As an immediate workaround, run `master` instead of
+`gui` to fall back to the text UI, which exercises the exact same
+`lib/*.lua` logic without depending on Basalt at all.
+
 ## `worker.lua`/`master.lua` exited with "attempt to index global 'package' (a nil value)"
 
 Fixed as of this version of `startup.lua` -- if you're seeing this,

@@ -24,5 +24,6 @@ return {
   master = {
     "master/startup.lua",
     "master/master.lua",
+    "master/gui.lua",
   },
 }
