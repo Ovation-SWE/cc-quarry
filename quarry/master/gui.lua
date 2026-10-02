@@ -249,6 +249,22 @@ local unloadXIn = labeledInput(setupTab, rightX, 2, "X", 2, 6, up0.x or 0)
 local unloadYIn = labeledInput(setupTab, rightX, 3, "Y", 2, 6, up0.y or 0)
 local unloadZIn = labeledInput(setupTab, rightX, 4, "Z", 2, 6, up0.z or 0)
 
+-- Tab cycles focus to the next field (Basalt2 has no built-in Tab
+-- navigation -- see docs/TROUBLESHOOTING.md). Shift+Tab/reverse is
+-- not implemented: Basalt's key event doesn't report modifier state
+-- directly, only (self, keyCode, held).
+local tabOrder = {
+    minXIn, maxXIn, minYIn, maxYIn, minZIn, maxZIn,
+    workerCountIn, fuelReserveIn, invThreshIn,
+    unloadXIn, unloadYIn, unloadZIn,
+}
+for i, input in ipairs(tabOrder) do
+    local nextInput = tabOrder[i + 1] or tabOrder[1]
+    input:onKey(function(_, keyCode)
+        if keyCode == keys.tab then nextInput:focus() end
+    end)
+end
+
 local function choiceGroup(parent, x, y, label, choices, current)
     parent:addLabel({ x = x, y = y, text = label, foreground = colors.yellow })
     local selected = current or choices[1]
@@ -283,10 +299,16 @@ local directionGroup = choiceGroup(setupTab, rightX, 6, "Unload direction", { "f
 local liquidGroup = choiceGroup(setupTab, rightX, 11, "Liquid policy",
     { "STOP_AT_LIQUID", "BLOCK_LIQUID", "ALLOW_LIQUID" }, cfg0.liquidPolicy)
 
--- Output area + action buttons, spanning the bottom of the tab.
-local outputY = screenH - 6
+-- Output area + action buttons, below all the form content above
+-- (which runs through row 14: the liquid-policy choice group's last
+-- button). Anchored from the top, not from screenH, so it can never
+-- overlap the form regardless of actual screen size; it just gets
+-- more/less breathing room on taller/shorter screens.
+local buttonsY = 16
+local outputY = 17
+local outputHeight = math.max(3, screenH - outputY - 1)
 local output = setupTab:addTextBox({
-    x = 2, y = outputY, width = screenW - 4, height = 5,
+    x = 2, y = outputY, width = screenW - 4, height = outputHeight,
     background = colors.black, foreground = colors.white,
     text = "",
 })
@@ -317,10 +339,10 @@ local function readConfigFromForm()
     return cfg
 end
 
-local saveBtn = setupTab:addButton({ x = 2, y = outputY - 1, width = 10, text = "Save" })
-local validateBtn = setupTab:addButton({ x = 13, y = outputY - 1, width = 10, text = "Validate" })
-local partitionBtn = setupTab:addButton({ x = 24, y = outputY - 1, width = 10, text = "Partition" })
-local dryrunBtn = setupTab:addButton({ x = 35, y = outputY - 1, width = 10, text = "Dry Run" })
+local saveBtn = setupTab:addButton({ x = 2, y = buttonsY, width = 10, text = "Save" })
+local validateBtn = setupTab:addButton({ x = 13, y = buttonsY, width = 10, text = "Validate" })
+local partitionBtn = setupTab:addButton({ x = 24, y = buttonsY, width = 10, text = "Partition" })
+local dryrunBtn = setupTab:addButton({ x = 35, y = buttonsY, width = 10, text = "Dry Run" })
 
 saveBtn:onClick(function()
     local cfg = readConfigFromForm()
@@ -388,22 +410,26 @@ end)
 -- Deploy tab
 ----------------------------------------------------------------------
 
-local deploySummary = deployTab:addLabel({ x = 2, y = 2, width = screenW - 4, height = 2, text = "" })
+-- Two separate one-line labels, not one wrapped string: a wrapped
+-- label's 2nd row has an unpredictable y position that's easy to
+-- collide with whatever's placed next (this previously overlapped
+-- the Deploy/Start buttons on screens narrow enough to force a wrap).
+local deploySummaryLine1 = deployTab:addLabel({ x = 2, y = 2, width = screenW - 4, height = 1, text = "" })
+local deploySummaryLine2 = deployTab:addLabel({ x = 2, y = 3, width = screenW - 4, height = 1, text = "" })
+local deployBtn = deployTab:addButton({ x = 2, y = 5, width = 10, text = "Deploy" })
+local startBtn = deployTab:addButton({ x = 13, y = 5, width = 10, text = "Start" })
 local deployOutput = deployTab:addTextBox({
-    x = 2, y = 5, width = screenW - 4, height = screenH - 9,
+    x = 2, y = 7, width = screenW - 4, height = math.max(3, screenH - 8),
     background = colors.black, foreground = colors.white, text = "",
 })
 
 local function refreshDeploySummary()
     local parts = state.partitions and #state.partitions or 0
     local regs = #registeredWorkerIds()
-    deploySummary.text = string.format("Partitions computed: %d    Registered workers: %d    Deployed: %s    Started: %s",
-        parts, regs, tostring(state.deployed), tostring(state.started))
+    deploySummaryLine1.text = string.format("Partitions computed: %d    Registered workers: %d", parts, regs)
+    deploySummaryLine2.text = string.format("Deployed: %s    Started: %s", tostring(state.deployed), tostring(state.started))
 end
 refreshDeploySummary()
-
-local deployBtn = deployTab:addButton({ x = 2, y = 3, width = 10, text = "Deploy" })
-local startBtn = deployTab:addButton({ x = 13, y = 3, width = 10, text = "Start" })
 
 local function doDeploy()
     deployOutput.text = ""
@@ -481,8 +507,15 @@ end)
 
 local jobLabel = statusTab:addLabel({ x = 2, y = 1, width = screenW - 4, text = "No active job." })
 
+-- detailLabel is a multi-row TextBox, not a 1-2 row Label: a one-line
+-- Label previously truncated long lastError values (e.g. a full Lua
+-- error message/stack line), which is exactly the information you
+-- need most when a worker is in ERROR -- see docs/TROUBLESHOOTING.md.
+local statusButtonsY = screenH - 2
+local detailHeight = 5
+local detailY = statusButtonsY - detailHeight - 1
 local workerTable = statusTab:addTable({
-    x = 2, y = 2, width = screenW - 4, height = screenH - 8,
+    x = 2, y = 2, width = screenW - 4, height = math.max(3, detailY - 3),
     columns = {
         { title = "ID", width = 5 },
         { title = "Status", width = 14 },
@@ -492,7 +525,11 @@ local workerTable = statusTab:addTable({
     },
 })
 
-local detailLabel = statusTab:addLabel({ x = 2, y = screenH - 5, width = screenW - 4, height = 2, text = "Click a worker row for details." })
+local detailLabel = statusTab:addTextBox({
+    x = 2, y = detailY, width = screenW - 4, height = detailHeight,
+    background = colors.black, foreground = colors.white,
+    text = "Click a worker row for details.",
+})
 
 local function refreshStatus()
     jobLabel.text = state.jobId and ("Active job: " .. state.jobId) or "No active job."
@@ -513,8 +550,12 @@ workerTable:onSelect(function(self, dataIndex, row)
     local w = id and state.workers[id]
     if not w then return end
     local last = w.last or {}
-    detailLabel.text = string.format("Worker %d (%s): slot=%s pos=(%s,%s,%s) lastError=%s",
-        id, tostring(w.label), tostring(w.slot), tostring(last.x), tostring(last.y), tostring(last.z), tostring(last.lastError))
+    detailLabel.text = string.format(
+        "Worker %d (%s)  slot=%s\npos=(%s,%s,%s)  fuel=%s  inv=%s\nlastError=%s",
+        id, tostring(w.label), tostring(w.slot),
+        tostring(last.x), tostring(last.y), tostring(last.z),
+        tostring(last.fuel), tostring(last.inventoryUtilization),
+        tostring(last.lastError))
 end)
 
 local function broadcastCommand(msgType)
@@ -575,7 +616,8 @@ if _G.__QUARRY_TEST_MODE then
             directionGroup = directionGroup, liquidGroup = liquidGroup,
             saveBtn = saveBtn, validateBtn = validateBtn, partitionBtn = partitionBtn, dryrunBtn = dryrunBtn,
             output = output,
-            deployBtn = deployBtn, startBtn = startBtn, deployOutput = deployOutput, deploySummary = deploySummary,
+            deployBtn = deployBtn, startBtn = startBtn, deployOutput = deployOutput,
+            deploySummaryLine1 = deploySummaryLine1, deploySummaryLine2 = deploySummaryLine2,
             workerTable = workerTable, jobLabel = jobLabel, detailLabel = detailLabel,
             pauseBtn = pauseBtn, resumeBtn = resumeBtn, cancelBtn = cancelBtn, estopBtn = estopBtn,
             modal = modal, modalYes = modalYes, modalNo = modalNo,
