@@ -1,5 +1,18 @@
 # Troubleshooting Guide
 
+## `worker.lua`/`master.lua` exited with "attempt to index global 'package' (a nil value)"
+
+Fixed as of this version of `startup.lua` -- if you're seeing this,
+you're running a `startup.lua` from before the fix and need to
+re-install it (re-run `bootstrap.lua`, or re-copy `worker/startup.lua`/
+`master/startup.lua` manually). The cause: CC:Tweaked's `dofile()`
+always loads the target file with the raw global environment, which
+does not have `require`/`package` on it -- those only exist in the
+fresh per-program environment the shell builds for each program it
+runs via `shell.run`. `startup.lua` now uses `shell.run("worker.lua")`/
+`shell.run("master.lua")` instead of `dofile(...)` for exactly this
+reason.
+
 ## "FATAL: no wireless modem found" on boot
 
 Both `worker.lua` and `master.lua` require a wireless modem, found via

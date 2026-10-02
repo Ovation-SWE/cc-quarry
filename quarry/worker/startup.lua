@@ -5,10 +5,14 @@
 -- start that program reliably and fail loudly (never silently) if it
 -- cannot.
 
-local ok, err = pcall(dofile, "worker.lua")
+-- Must use shell.run, not dofile: CC:Tweaked's dofile() always loads with
+-- the raw global environment (see bios.lua), which does not have
+-- require/package on it -- those only exist in the fresh per-program
+-- environment the shell builds for each program it runs. worker.lua needs
+-- require() for lib/*.lua, so it must be launched the same way any other
+-- shell program is.
+local ok = shell.run("worker.lua")
 if not ok then
-    print("worker.lua exited with an error:")
-    print(tostring(err))
     print("The worker has stopped. Check the error above, then reboot")
     print("once it is resolved (see docs/TROUBLESHOOTING.md).")
 end

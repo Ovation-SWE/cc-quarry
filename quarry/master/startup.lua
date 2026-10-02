@@ -2,9 +2,9 @@
 -- for the same reasons as worker/startup.lua: all real logic lives in
 -- master.lua + lib/*.lua.
 
-local ok, err = pcall(dofile, "master.lua")
+-- Must use shell.run, not dofile: see worker/startup.lua for why (CC:Tweaked's
+-- dofile() loads with the raw global environment, which lacks require/package).
+local ok = shell.run("master.lua")
 if not ok then
-    print("master.lua exited with an error:")
-    print(tostring(err))
     print("Fix the issue above, then run 'master' or reboot to retry.")
 end
