@@ -181,3 +181,37 @@ will assign it as that worker's `starting_position`, **facing north**
 GPS, cannot detect a misplacement -- see `docs/LIMITATIONS.md`. Run
 `dryrun` after `partition` to see exactly where each worker needs to
 be placed before committing to `deploy`.
+
+**Optional: use a depot instead of exact per-job placement.** Setting
+up a `depotPoint` (see `docs/CONFIG_REFERENCE.md`) lets you place every
+worker at one fixed, reusable spot instead of a unique coordinate per
+job:
+
+1. Build a small staging pad once, anywhere convenient, and place an
+   inventory block (chest, barrel, etc.) **directly in front of** the
+   spot a turtle will stand, facing whichever cardinal direction you
+   choose as the depot's `facing`.
+2. Stock that chest with a combustible item (coal, charcoal, ...).
+   Size the stock to how many workers you'll cycle through it before
+   restocking: `turtle.suck()` pulls up to a full stack per visit and
+   `turtle.refuel()` burns an entire stack per call (real CC:Tweaked
+   behavior, not something this project can make more granular), so a
+   single worker's visit can draw substantially more than its own
+   trip needs -- this is expected, not a bug.
+3. Enter this spot's coordinates and facing as `depotPoint` when
+   configuring the job (the `new` wizard's "configure a shared depot"
+   prompt, or the GUI's Depot tab).
+4. Place every worker turtle at that one spot (one at a time -- a
+   block can only hold one turtle) with **zero pre-loaded fuel
+   required**: `turtle.suck()` is an inventory operation, not
+   movement, so it works even from an empty tank. Power each on and
+   let it register as usual.
+5. After `deploy`+`start`, each worker sucks fuel from the depot, then
+   actually travels (digging through anything in the way, since that
+   leg is outside its own partition) from the depot to its assigned
+   `starting_position` -- no manual per-job placement needed beyond
+   this one shared spot.
+
+Leave `depotPoint` unset to keep today's default behavior (exact
+per-job placement, as described above). See `docs/LIMITATIONS.md` for
+what this trades off.

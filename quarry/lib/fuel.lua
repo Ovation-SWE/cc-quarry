@@ -87,6 +87,26 @@ function fuel:autoRefuel(targetLevel)
     return false, errors.make(errors.RESOURCE_EXHAUSTED, "insufficient_fuel_items")
 end
 
+--- Pull items from whatever the turtle is facing (a depot chest, by
+--- convention -- see docs/SETUP.md) via turtle.suck(), then burn
+--- whatever was collected via autoRefuel(). turtle.suck() is an
+--- inventory operation, not movement, so it costs no fuel: this works
+--- even from an empty tank, which is what lets a worker be placed at
+--- a depot with zero pre-loaded fuel. Bounded by maxAttempts (default
+--- 64) so an empty/absent depot can never hang the worker. Returns
+--- true once targetLevel is reached; false + autoRefuel's classified
+--- error if the depot ran out of suckable combustible items first.
+function fuel:collectFromDepot(targetLevel, maxAttempts)
+    if self:isUnlimited() then return true end
+    maxAttempts = maxAttempts or 64
+    for _ = 1, maxAttempts do
+        if self:level() >= targetLevel then break end
+        local sucked = self.turtle.suck()
+        if not sucked then break end
+    end
+    return self:autoRefuel(targetLevel)
+end
+
 --- Ensure at least `needed` fuel is available (including reserve),
 --- auto-refueling if necessary. This is the function callers should
 --- use before any multi-block movement.

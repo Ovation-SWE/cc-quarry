@@ -16,6 +16,7 @@ location:
 | Command | GUI location |
 |---|---|
 | `new`, `show` | Setup tab: form fields, pre-filled from the last saved config |
+| `new`'s depot prompt | Depot tab: optional X/Y/Z/facing fields, saved together with the Setup tab's Save button -- see `docs/CONFIG_REFERENCE.md`'s `depotPoint` |
 | `validate` | Setup tab: Validate button |
 | `partition` | Setup tab: Partition button |
 | `dryrun` | Setup tab: Dry Run button |
@@ -27,7 +28,7 @@ location:
 
 | Command | Effect |
 |---|---|
-| `new` | Interactive wizard to configure a new quarry. Overwrites any in-progress (not yet deployed) draft configuration and clears any previously computed partitions. |
+| `new` | Interactive wizard to configure a new quarry. Overwrites any in-progress (not yet deployed) draft configuration and clears any previously computed partitions. Includes an optional prompt for a shared `depotPoint` -- see `docs/SETUP.md`'s depot workflow; answering "n" (the default) keeps today's exact-per-job-placement behavior. |
 | `show` | Display the current configuration and active job ID, if any. |
 | `validate` | Run every check in `lib/validation.lua:validateConfig()` against the current configuration and currently registered workers; prints every problem found (never stops at the first one). |
 | `partition` | Compute the partition layout (`lib/partition.lua`) for the current configuration and display it. Safe to run repeatedly; does not touch any turtle. |

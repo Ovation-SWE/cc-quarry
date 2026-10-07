@@ -60,9 +60,11 @@ recover:
    job's `liquidPolicy`/`ignoredBlocks` configuration for future
    jobs).
 2. If the obstruction is now resolved (you manually cleared it, or it
-   was a transient GPS blip), send `resume` -- the worker re-attempts
-   the *exact same* next cell it was blocked on. Nothing is skipped or
-   guessed.
+   was a transient GPS blip), send `resume` -- the worker returns to
+   whichever state it was actually interrupted from (mining, or --
+   with a `depotPoint` configured, see `docs/SETUP.md` -- collecting
+   resources at the depot / transiting to `starting_position`) and
+   re-attempts from exactly there. Nothing is skipped or guessed.
 3. If the obstruction cannot be resolved, `cancel` the job for that
    worker's slot and accept the partition as partially complete, or
    `estop` and redeploy a corrected configuration.

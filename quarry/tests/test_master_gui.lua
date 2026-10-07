@@ -110,6 +110,7 @@ check(hooks.state.config ~= nil, "Save populates state.config")
 check(hooks.state.config.minX == 0 and hooks.state.config.maxY == 2, "form-entered bounds recorded correctly")
 check(hooks.state.config.unloadPoint.direction == "down", "form-entered unload direction recorded correctly")
 check(hooks.state.config.liquidPolicy == "STOP_AT_LIQUID", "form-entered liquid policy recorded correctly")
+check(hooks.state.config.depotPoint == nil, "leaving the Depot tab's X/Y/Z blank means no depot is configured (opt-in default)")
 
 -- Validate.
 w.validateBtn._handlers.click()
@@ -136,6 +137,7 @@ do
     local from, msg = workerNode.receive("quarry.v1", 0)
     check(from == MASTER_ID and msg and msg.type == "job_assign", "worker actually received a job_assign message")
     check(msg.payload.partition_min_y == 0 and msg.payload.partition_max_y == 2, "job payload carries the correct partition bounds")
+    check(msg.payload.configuration.depotPoint == nil, "job payload has no depotPoint when none was configured")
     local jobOk, jobErrs = validation.validateJob(msg.payload, WORKER_ID)
     check(jobOk == true, "gui's real job_assign payload passes the worker's own validateJob: " .. table.concat(jobErrs or {}, "; "))
 end
@@ -189,6 +191,45 @@ check(hooks.state.deployed == false, "confirming Cancel clears the deployed flag
 do
     local from, msg = workerNode.receive("quarry.v1", 0)
     check(from == MASTER_ID and msg and msg.type == "cancel", "Cancel sends a cancel message")
+    -- Like pause above, no ack was injected, so sendReliable retried
+    -- (same sequence each time) -- drain the leftover duplicates so
+    -- they don't bleed into the next check.
+    while workerNode.receive("quarry.v1", 0) do end
+end
+
+-- Depot configuration (opt-in): fill in the Depot tab's fields and
+-- re-save, verifying depotPoint flows all the way through to a
+-- freshly deployed job's payload. Run last (after cancel above) so
+-- it can't disturb the earlier deploy/start/pause/cancel assertions.
+-- master's shared comm sequence counter is at 5 by this point
+-- (1=register ack, 2=job_assign, 3=start, 4=pause, 5=cancel), so the
+-- next sendReliable (this re-deploy's job_assign) will be sequence 6.
+do
+    w.depotXIn.text, w.depotYIn.text, w.depotZIn.text = "5", "64", "5"
+    w.depotFacingGroup.set("east")
+    w.saveBtn._handlers.click()
+    check(hooks.state.config.depotPoint ~= nil, "filling in the Depot tab's X/Y/Z populates depotPoint")
+    check(hooks.state.config.depotPoint.x == 5 and hooks.state.config.depotPoint.y == 64
+        and hooks.state.config.depotPoint.z == 5, "depot coordinates recorded correctly")
+    check(hooks.state.config.depotPoint.facing == 1, "depot facing 'east' converted to the numeric convention (1)")
+
+    w.partitionBtn._handlers.click()
+    -- sequence must differ from the earlier acks (500, 501) in this
+    -- file: comm:isDuplicate() dedups purely on (from, sequence), so
+    -- reusing 500 here would be silently dropped as an already-seen
+    -- duplicate rather than matched against this new ackFor.
+    masterNode.injectRaw(WORKER_ID,
+        { type = "ack", protocolVersion = 1, jobId = EXPECTED_JOB_ID, workerId = WORKER_ID, sequence = 502, ackFor = 6 },
+        "quarry.v1")
+    w.deployBtn._handlers.click()
+    w.modalYes._handlers.click()
+    check(hooks.state.workers[WORKER_ID].status == "ASSIGNED", "worker status becomes ASSIGNED after the depot-enabled re-deploy ack")
+    local from, msg = workerNode.receive("quarry.v1", 0)
+    check(from == MASTER_ID and msg and msg.type == "job_assign", "re-deploying after enabling a depot still sends job_assign")
+    check(msg.payload.configuration.depotPoint ~= nil and msg.payload.configuration.depotPoint.facing == 1,
+        "the deployed job payload carries the configured depotPoint")
+    local jobOk2, jobErrs2 = validation.validateJob(msg.payload, WORKER_ID)
+    check(jobOk2 == true, "job payload with a depotPoint still passes validateJob: " .. table.concat(jobErrs2 or {}, "; "))
 end
 
 print(string.format("\n%d checks, %d failures", checks, failures))

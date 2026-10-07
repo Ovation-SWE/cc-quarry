@@ -169,6 +169,7 @@ main:addLabel({
 
 local tabs = main:addTabControl({ x = 1, y = 2, width = screenW, height = screenH - 1 })
 local setupTab = tabs:addTab("Setup")
+local depotTab = tabs:addTab("Depot")
 local deployTab = tabs:addTab("Deploy")
 local statusTab = tabs:addTab("Status")
 
@@ -299,6 +300,39 @@ local directionGroup = choiceGroup(setupTab, rightX, 6, "Unload direction", { "f
 local liquidGroup = choiceGroup(setupTab, rightX, 11, "Liquid policy",
     { "STOP_AT_LIQUID", "BLOCK_LIQUID", "ALLOW_LIQUID" }, cfg0.liquidPolicy)
 
+----------------------------------------------------------------------
+-- Depot tab: optional shared staging-pad config (see docs/SETUP.md).
+-- Its own tab, not squeezed into Setup, because Setup's rows already
+-- run through row 14 on a minimal 51x19 terminal -- see the "Output
+-- area" comment below for why that tab's content is anchored the way
+-- it is. Read by the same readConfigFromForm()/Save button as every
+-- other Setup field; there is no separate save action here.
+----------------------------------------------------------------------
+
+local FACING_NAMES = { "north", "east", "south", "west" }
+local FACING_BY_NAME = { north = 0, east = 1, south = 2, west = 3 }
+local dp0 = cfg0.depotPoint or {}
+
+depotTab:addLabel({
+    x = 2, y = 1, width = screenW - 4, height = 3,
+    text = "Optional: place every worker turtle at this one fixed spot instead of its exact job site. "
+        .. "It will self-refuel (turtle.suck) and auto-navigate from here to its assigned starting position. "
+        .. "Leave X/Y/Z blank to require exact per-job placement (today's default).",
+})
+depotTab:addLabel({ x = 2, y = 5, text = "Depot point", foreground = colors.yellow })
+local depotXIn = labeledInput(depotTab, 2, 6, "X", 2, 6, dp0.x)
+local depotYIn = labeledInput(depotTab, 2, 7, "Y", 2, 6, dp0.y)
+local depotZIn = labeledInput(depotTab, 2, 8, "Z", 2, 6, dp0.z)
+local depotFacingGroup = choiceGroup(depotTab, 2, 10, "Facing", FACING_NAMES, FACING_NAMES[(dp0.facing or 0) + 1])
+
+local depotTabOrder = { depotXIn, depotYIn, depotZIn }
+for i, input in ipairs(depotTabOrder) do
+    local nextInput = depotTabOrder[i + 1] or depotTabOrder[1]
+    input:onKey(function(_, keyCode)
+        if keyCode == keys.tab then nextInput:focus() end
+    end)
+end
+
 -- Output area + action buttons, below all the form content above
 -- (which runs through row 14: the liquid-policy choice group's last
 -- button). Anchored from the top, not from screenH, so it can never
@@ -318,6 +352,11 @@ local function logOutput(widget, text)
 end
 
 local function readConfigFromForm()
+    local dx, dy, dz = tonumber(depotXIn.text), tonumber(depotYIn.text), tonumber(depotZIn.text)
+    local depotPoint = (dx and dy and dz) and {
+        x = dx, y = dy, z = dz,
+        facing = FACING_BY_NAME[depotFacingGroup.get()] or 0,
+    } or nil
     local cfg = {
         minX = tonumber(minXIn.text), maxX = tonumber(maxXIn.text),
         minY = tonumber(minYIn.text), maxY = tonumber(maxYIn.text),
@@ -333,6 +372,7 @@ local function readConfigFromForm()
             z = tonumber(unloadZIn.text) or 0,
             direction = directionGroup.get(),
         },
+        depotPoint = depotPoint,
         cleanupPass = cleanupCheckbox.checked,
         protocolVersion = protocol.VERSION,
     }
@@ -464,6 +504,7 @@ local function doDeploy()
                 liquidPolicy = cfgCopy.liquidPolicy,
                 ignoredBlocks = cfgCopy.ignoredBlocks,
                 unloadPoint = cfgCopy.unloadPoint,
+                depotPoint = cfgCopy.depotPoint,
             },
         }
         state.slotWorker[i] = workerId
@@ -614,6 +655,7 @@ if _G.__QUARRY_TEST_MODE then
             cleanupCheckbox = cleanupCheckbox,
             unloadXIn = unloadXIn, unloadYIn = unloadYIn, unloadZIn = unloadZIn,
             directionGroup = directionGroup, liquidGroup = liquidGroup,
+            depotXIn = depotXIn, depotYIn = depotYIn, depotZIn = depotZIn, depotFacingGroup = depotFacingGroup,
             saveBtn = saveBtn, validateBtn = validateBtn, partitionBtn = partitionBtn, dryrunBtn = dryrunBtn,
             output = output,
             deployBtn = deployBtn, startBtn = startBtn, deployOutput = deployOutput,

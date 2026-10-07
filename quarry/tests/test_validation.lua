@@ -91,6 +91,37 @@ do
     check(ok == false, "incompatible protocolVersion rejected")
 end
 
+-- 8a. depotPoint is optional: absent is valid (today's default behavior)
+do
+    local c = baseConfig() -- no depotPoint field at all
+    local ok, errs = validation.validateConfig(c, { availableWorkers = 4 })
+    check(ok == true, "config with no depotPoint is valid: " .. table.concat(errs or {}, "; "))
+end
+
+-- 8b. A well-formed depotPoint is accepted
+do
+    local c = baseConfig()
+    c.depotPoint = { x = 5, y = 64, z = 5, facing = 1 }
+    local ok, errs = validation.validateConfig(c, { availableWorkers = 4 })
+    check(ok == true, "well-formed depotPoint is valid: " .. table.concat(errs or {}, "; "))
+end
+
+-- 8c. depotPoint with a non-integer coordinate is rejected
+do
+    local c = baseConfig()
+    c.depotPoint = { x = 5.5, y = 64, z = 5, facing = 0 }
+    local ok = validation.validateConfig(c, {})
+    check(ok == false, "depotPoint with a non-integer coordinate is rejected")
+end
+
+-- 8d. depotPoint.facing outside 0..3 is rejected
+do
+    local c = baseConfig()
+    c.depotPoint = { x = 5, y = 64, z = 5, facing = 4 }
+    local ok = validation.validateConfig(c, {})
+    check(ok == false, "depotPoint.facing outside 0..3 is rejected")
+end
+
 -- 9. Degenerate but valid single-block dimensions are accepted (1x1x1 quarry)
 do
     local c = baseConfig()

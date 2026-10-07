@@ -77,6 +77,37 @@ do
     check(w.inventory[1].count == 5, "ensure() did not consume fuel items when unnecessary")
 end
 
+-- 6b. collectFromDepot sucks from a zero-fuel tank (suck costs no fuel)
+-- and tops up via autoRefuel, exactly the depot/staging-pad workflow
+-- in docs/SETUP.md.
+do
+    local w = World.new({ fuel = 0, depotStock = { name = "minecraft:coal", count = 10 } }) -- 800 fuel available
+    local f = fuel.new({ turtle = w:turtleAPI() })
+    local ok, err = f:collectFromDepot(150)
+    check(ok, "collectFromDepot reaches target level from an empty tank: " .. tostring(err))
+    check(w.fuel >= 150, "fuel level reached target after sucking+refueling")
+    check(w.depotStock.count < 10, "depot stock was actually drawn down")
+end
+
+-- 6c. collectFromDepot fails cleanly when the depot is empty/absent
+do
+    local w = World.new({ fuel = 0 }) -- no depotStock at all
+    local f = fuel.new({ turtle = w:turtleAPI() })
+    local ok, err = f:collectFromDepot(100)
+    check(ok == false, "collectFromDepot fails when there's nothing to suck")
+    check(errors.kindOf(err) == errors.RESOURCE_EXHAUSTED, "empty depot classified RESOURCE_EXHAUSTED (via autoRefuel)")
+end
+
+-- 6d. collectFromDepot is a no-op success on unlimited fuel (never sucks needlessly)
+do
+    local w = World.new({ depotStock = { name = "minecraft:coal", count = 10 } })
+    w.fuel = "unlimited"
+    local f = fuel.new({ turtle = w:turtleAPI() })
+    local ok = f:collectFromDepot(999999)
+    check(ok, "collectFromDepot no-ops successfully on unlimited fuel")
+    check(w.depotStock.count == 10, "unlimited fuel never bothers sucking from the depot")
+end
+
 -- ===== inventory =====
 
 -- 7. isFull / freeSlotCount respect reserved slots

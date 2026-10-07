@@ -79,8 +79,13 @@ local function buildSubsystems(ctx, navState)
         turtle = turtle,
         log = ctx.log,
         obstacleHandler = function(kind)
-            local ok, err = ctx.mining:clear(kind)
-            return ok, err
+            -- NAVIGATING_TO_START (the depot-to-starting_position leg,
+            -- see steps.COLLECTING_RESOURCES) is outside the worker's
+            -- assigned partition by definition, so it uses the
+            -- partition-free transitMining instance instead of the
+            -- normal partition-fenced one -- see transitMining below.
+            local m = ctx.sm:is("NAVIGATING_TO_START") and ctx.transitMining or ctx.mining
+            return m:clear(kind)
         end,
     }, navState)
     ctx.mining = mining.new({
@@ -88,6 +93,22 @@ local function buildSubsystems(ctx, navState)
         nav = ctx.nav,
         log = ctx.log,
         partition = jobPartition(ctx.job),
+        ignoredBlocks = cfg.ignoredBlocks,
+        liquidPolicy = cfg.liquidPolicy,
+        sealBlockSlot = cfg.sealBlockSlot,
+    })
+    -- Partition-free twin of ctx.mining, used only while traveling
+    -- from an optional configured depotPoint to starting_position
+    -- (steps.NAVIGATING_TO_START). That leg is necessarily outside
+    -- the partition, so the normal instance's partition fence
+    -- (lib/mining.lua's out_of_partition check) would refuse every
+    -- dig along the way. Liquid safety (never walking into lava) is
+    -- still enforced identically -- only the partition fence differs.
+    ctx.transitMining = mining.new({
+        turtle = turtle,
+        nav = ctx.nav,
+        log = ctx.log,
+        partition = nil,
         ignoredBlocks = cfg.ignoredBlocks,
         liquidPolicy = cfg.liquidPolicy,
         sealBlockSlot = cfg.sealBlockSlot,
@@ -105,11 +126,10 @@ local function buildSubsystems(ctx, navState)
         log = ctx.log,
     })
     ctx.gpsnav = gpsnav.new({ nav = ctx.nav, log = ctx.log })
-    -- mining.lua's obstacleHandler closes over ctx.mining before it
-    -- exists on the first call above; rebuild nav's obstacleHandler
-    -- now that ctx.mining is set (the closure already reads ctx.mining
-    -- by upvalue at call time, so this is actually already correct --
-    -- no separate action needed).
+    -- nav's obstacleHandler closure (set above, before ctx.mining/
+    -- ctx.transitMining exist yet) reads both by upvalue at call time,
+    -- so it's already correct once this function returns -- no
+    -- separate rebuild step needed.
 end
 
 local function snapshot(ctx)
@@ -159,6 +179,29 @@ local function maybeSendHeartbeat(ctx)
     end
 end
 
+--- What state RESUME should return to: the most recent state the
+--- worker was actually interrupted from, read off ctx.sm's own
+--- transition history (lib/state_machine.lua records {from,to,event}
+--- on every transition already -- no separate bookkeeping needed).
+--- Scans backward past repeated PAUSED<->PAUSED/ERROR<->ERROR entries
+--- (e.g. re-pausing while already paused) to find the real source
+--- state. Resuming unconditionally into "MINING" would be wrong now
+--- that COLLECTING_RESOURCES/NAVIGATING_TO_START are real multi-step
+--- processes that can themselves error out (e.g. an empty depot, or
+--- a blocked transit path) -- resume must return there, not skip
+--- straight to mining from wherever the turtle currently stands.
+local function resumeTargetState(ctx)
+    local history = ctx.sm.history
+    local current = ctx.sm:getState()
+    for i = #history, 1, -1 do
+        local h = history[i]
+        if h.to == current and h.from ~= "PAUSED" and h.from ~= "ERROR" then
+            return h.from
+        end
+    end
+    return "MINING"
+end
+
 --- Handle a control message that can arrive in almost any state.
 --- Returns true if it was handled here (caller should re-check state).
 local function handleControlMessage(ctx, from, msg)
@@ -169,7 +212,7 @@ local function handleControlMessage(ctx, from, msg)
     elseif msg.type == protocol.TYPES.RESUME then
         ctx.comm:sendAck(from, msg)
         if ctx.sm:is("PAUSED") or ctx.sm:is("ERROR") then
-            ctx.sm:transition("MINING", "master_resume")
+            ctx.sm:transition(resumeTargetState(ctx), "master_resume")
         end
         return true
     elseif msg.type == protocol.TYPES.CANCEL then
@@ -189,7 +232,8 @@ local function handleControlMessage(ctx, from, msg)
     elseif msg.type == protocol.TYPES.START then
         ctx.comm:sendAck(from, msg)
         if ctx.sm:is("ASSIGNED") then
-            ctx.sm:transition("NAVIGATING_TO_START", "master_start")
+            local hasDepot = ctx.job.configuration.depotPoint ~= nil
+            ctx.sm:transition(hasDepot and "COLLECTING_RESOURCES" or "NAVIGATING_TO_START", "master_start")
         end
         return true
     elseif msg.type == protocol.TYPES.JOB_ASSIGN then
@@ -298,8 +342,19 @@ function steps.VALIDATING_JOB(ctx)
     ctx.job = ctx.pendingJob
     ctx.masterId = ctx.pendingFrom
     ctx.comm:setJobId(ctx.job.job_id)
+    -- If the job configures a depotPoint (opt-in; see docs/SETUP.md),
+    -- seed dead reckoning there instead of at starting_position: the
+    -- operator placed the turtle at the depot, not at the job site,
+    -- and steps.COLLECTING_RESOURCES/NAVIGATING_TO_START handle the
+    -- real journey from one to the other. Without a depotPoint, this
+    -- is exactly today's behavior: trust the operator placed the
+    -- turtle at starting_position already.
+    local depot = ctx.job.configuration.depotPoint
     local start = ctx.job.starting_position
-    buildSubsystems(ctx, { x = start.x, y = start.y, z = start.z, facing = ctx.job.starting_facing })
+    local seed = depot
+        and { x = depot.x, y = depot.y, z = depot.z, facing = depot.facing }
+        or { x = start.x, y = start.y, z = start.z, facing = ctx.job.starting_facing }
+    buildSubsystems(ctx, seed)
     ctx.comm:sendAck(ctx.pendingFrom, { jobId = ctx.job.job_id, sequence = ctx.pendingSeq })
     ctx.sm:transition("ASSIGNED", "job_validated")
 end
@@ -317,6 +372,33 @@ function steps.ASSIGNED(ctx)
     if msg then handleControlMessage(ctx, from, msg) end
 end
 
+--- Only entered when the job configures a depotPoint (see
+--- handleControlMessage's START case). The worker was placed at the
+--- depot, not starting_position -- buildSubsystems seeded nav there.
+--- Top up fuel from whatever the turtle is facing (turtle.suck(),
+--- which costs no fuel, so this works even from an empty tank -- see
+--- docs/SETUP.md's depot/staging-pad workflow) before attempting the
+--- real journey to starting_position in steps.NAVIGATING_TO_START.
+function steps.COLLECTING_RESOURCES(ctx)
+    ctx.gpsnav:reconcile()
+    if not ctx.nav:isTrusted() then
+        ctx.lastError = "position_untrusted:" .. tostring(ctx.nav.untrustedReason)
+        ctx.sm:transition("ERROR", "position_untrusted")
+        return
+    end
+    local start = ctx.job.starting_position
+    local targetLevel = ctx.nav:distanceTo(start.x, start.y, start.z) + (ctx.job.configuration.fuelReserve or 0)
+    local ok, err = ctx.fuel:collectFromDepot(targetLevel)
+    checkpoint(ctx)
+    if ok then
+        ctx.sm:transition("NAVIGATING_TO_START", "depot_collected")
+    else
+        ctx.lastError = "depot_collection_failed:" .. tostring(err)
+        ctx.log:error("failed to collect fuel at depot", { error = err })
+        ctx.sm:transition("ERROR", "depot_empty")
+    end
+end
+
 function steps.NAVIGATING_TO_START(ctx)
     ctx.gpsnav:reconcile()
     if not ctx.nav:isTrusted() then
@@ -327,6 +409,13 @@ function steps.NAVIGATING_TO_START(ctx)
     local start = ctx.job.starting_position
     if ctx.nav.x == start.x and ctx.nav.y == start.y and ctx.nav.z == start.z then
         ctx.sm:transition("MINING", "arrived_at_start")
+        return
+    end
+    local distance = ctx.nav:distanceTo(start.x, start.y, start.z)
+    if not ctx.fuel:hasEnoughFor(distance) then
+        ctx.lastError = "insufficient_fuel_for_transit"
+        ctx.log:error("not enough fuel to reach starting position", { distance = distance, fuel = ctx.fuel:level() })
+        ctx.sm:transition("ERROR", "insufficient_fuel_for_transit")
         return
     end
     local ok, err = ctx.nav:moveTo(start.x, start.y, start.z)
@@ -556,7 +645,7 @@ end
 
 local STATE_NAMES = {
     "BOOT", "REGISTERING", "WAITING_FOR_JOB", "VALIDATING_JOB", "ASSIGNED",
-    "NAVIGATING_TO_START", "MINING", "INVENTORY_RETURN", "FUEL_RETURN",
+    "COLLECTING_RESOURCES", "NAVIGATING_TO_START", "MINING", "INVENTORY_RETURN", "FUEL_RETURN",
     "PAUSED", "RECOVERING", "COMPLETED", "ERROR", "EMERGENCY_STOP",
 }
 local stateSpec = {}

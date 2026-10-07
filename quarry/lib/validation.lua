@@ -86,6 +86,16 @@ function validation.validateConfig(config, context)
         end
     end
 
+    if config.depotPoint ~= nil then
+        local dp = config.depotPoint
+        if not (isInteger(dp.x) and isInteger(dp.y) and isInteger(dp.z)) then
+            fail("depotPoint must specify integer x, y, z")
+        end
+        if not (isInteger(dp.facing) and dp.facing >= 0 and dp.facing <= 3) then
+            fail("depotPoint.facing must be an integer in 0..3")
+        end
+    end
+
     if config.protocolVersion ~= nil and config.protocolVersion ~= protocol.VERSION then
         fail(string.format(
             "configuration protocolVersion (%s) is incompatible with this build (%d)",

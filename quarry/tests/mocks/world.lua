@@ -30,6 +30,7 @@ function World.new(opts)
     self.inventory = {}
     self.selected = 1
     self.digLog = {}
+    self.depotStock = opts.depotStock -- { name = "minecraft:coal", count = N } | nil
     return self
 end
 
@@ -103,6 +104,24 @@ local function collectItem(self, name)
         end
     end
     -- inventory full: item lost, matching vanilla drop-on-full-inventory
+end
+
+--- Real turtle.suck() pulls from the inventory/container the turtle
+--- is facing (or the ground). This mock models only the container
+--- case, via the depot-stock fixture World.new({depotStock=...})
+--- passed at construction -- there is no real adjacent-chest/block
+--- model here, just a fixed pile of items the turtle can draw from
+--- until it's exhausted. Returns false once depotStock is nil/empty,
+--- matching real turtle.suck()'s "nothing there" behavior.
+local function doSuck(self, count)
+    local stock = self.depotStock
+    if not stock or stock.count <= 0 then
+        return false, "No items to take"
+    end
+    count = math.min(count or 64, stock.count)
+    for _ = 1, count do collectItem(self, stock.name) end
+    stock.count = stock.count - count
+    return true
 end
 
 local function doDig(self, kind)
@@ -250,6 +269,10 @@ function World:turtleAPI()
     end
     api.dropUp = api.drop
     api.dropDown = api.drop
+
+    api.suck = function(count) return doSuck(self, count) end
+    api.suckUp = api.suck
+    api.suckDown = api.suck
 
     api.getFuelLevel = function() return self.fuel end
     api.getFuelLimit = function() return self.fuelLimit end

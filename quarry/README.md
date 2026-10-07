@@ -15,7 +15,7 @@ required to verify this system's correctness.**
 
 ```
 lua tests/run_all.lua      # from the quarry/ directory
-# -> TOTAL: 80084 checks, 0 failures across 13 files
+# -> TOTAL: 80123 checks, 0 failures across 14 files
 ```
 
 The master also has a point-and-click GUI (`master/gui.lua`, built on
@@ -39,7 +39,10 @@ text UI" below.
 3. On the master: `new` (configure), `validate`, `partition`,
    `dryrun` (check where to place turtles), physically place each
    worker turtle facing north at its printed starting position, then
-   `deploy` and `start`.
+   `deploy` and `start`. Optionally configure a shared `depotPoint` in
+   `new` instead, so every worker can be placed at one reusable spot
+   and self-navigate/self-refuel from there -- see `docs/SETUP.md`'s
+   depot workflow.
 4. Watch progress with `status` / `worker <id>` (or the Status tab, in the GUI).
 
 Full command reference: `docs/COMMANDS.md`. Configuration field
@@ -99,7 +102,7 @@ quarry/
       rednet_bus.lua       In-memory multi-node rednet substitute
       fs_mock.lua           Real-filesystem-backed fs API mock
       basalt_mock.lua       Fake Basalt widget tree (see gui.lua's header)
-    test_*.lua              13 test files, ~80k assertions total
+    test_*.lua              14 test files, ~80k assertions total
     run_all.lua              Convenience runner + summary
 
   config/

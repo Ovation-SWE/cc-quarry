@@ -169,6 +169,48 @@ about the GUI doesn't render or respond as expected, `master.lua` (the
 text UI) is always available as a fallback -- see README.md's "GUI vs.
 text UI".
 
+## The depot workflow digs through anything outside the partition on the way in
+
+When `depotPoint` is configured, the transit leg from the depot to
+`starting_position` (`steps.NAVIGATING_TO_START`) uses a partition-free
+mining instance (`ctx.transitMining` in `worker.lua`) specifically so it
+can clear a path -- the normal partition-fenced instance would refuse
+every dig on that leg, since it's necessarily outside the worker's own
+assigned partition. Liquid safety is still enforced identically (lava
+is never walked into regardless of policy); only the partition fence is
+bypassed. This was a deliberate choice over requiring a pre-cleared
+path: place the depot somewhere a worker tunneling straight-line toward
+its job site won't go through anything you care about keeping intact.
+
+## Depot fuel collection can draw more than one trip actually needs
+
+`turtle.suck()` pulls up to a full item stack per call, and
+`turtle.refuel()` burns an entire stack per call -- both real
+CC:Tweaked behaviors this project doesn't try to make more granular
+(see `lib/fuel.lua`'s header comment on never hardcoding a specific
+fuel item's value). A single worker's one visit to the depot can
+therefore consume substantially more of the shared stock than that
+one trip strictly needs. Size what you stock the depot with
+accordingly -- see `docs/SETUP.md`'s depot workflow.
+
+## Depot placement is sequential, not parallel
+
+A depot/staging pad is one physical block position; only one turtle
+can occupy it at a time. Provisioning N workers via a depot means
+placing them at that one spot one at a time (power on, let it collect
+and depart, then place the next), not lining several up simultaneously.
+
+## No pickaxe auto-equip at the depot
+
+The depot workflow automates fuel collection, not tool equipping.
+Equipping a pickaxe (`turtle.equipLeft`/`equipRight`) is a one-time
+action at a turtle's crafting/setup time, not a recurring per-job
+resource, and CC:Tweaked has no API to query whether a tool is already
+equipped -- there's no safe way to auto-equip without risking swapping
+out a tool that's already there. Mining Turtles (built-in pickaxe)
+need nothing here; a plain turtle needs its pickaxe equipped once,
+manually, before its first job.
+
 ## The GUI's Setup tab has the same `BLOCK_LIQUID` gap as the CLI wizard
 
 Like `master.lua`'s `new` command (see "`BLOCK_LIQUID` needs

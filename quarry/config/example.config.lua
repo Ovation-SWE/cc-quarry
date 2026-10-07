@@ -58,6 +58,15 @@ return {
     -- it facing -- see docs/CONFIG_REFERENCE.md.
     unloadPoint = { x = 0, y = 64, z = 0, direction = "down" },
 
+    -- Optional. A single shared staging-pad coordinate every worker
+    -- can be placed at instead of its own exact starting_position --
+    -- see docs/SETUP.md's depot workflow. `facing` is the 0-3 cardinal
+    -- convention (0=north); the depot chest must be directly in front
+    -- of the turtle at that facing. Omit this field entirely (nil) to
+    -- keep today's default: every worker must be placed exactly at
+    -- its own starting_position, facing north.
+    depotPoint = nil, -- e.g. { x = 0, y = 64, z = 0, facing = 0 }
+
     -- Whether to run a second pass after the main excavation to catch
     -- any stragglers (e.g. blocks that fell into an already-visited
     -- cell from a neighboring partition after the worker passed).

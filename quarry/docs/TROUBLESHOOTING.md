@@ -76,6 +76,21 @@ check `worker <id>` on the master: if its status is still `ASSIGNED`,
 the `start` message may not have been acknowledged (check wireless
 range); re-run `start`, which is safe to repeat.
 
+## A worker is stuck in `COLLECTING_RESOURCES`, or `ERROR` with `depot_collection_failed`/`insufficient_fuel_for_transit`
+
+Only possible when the job configures a `depotPoint` (see
+`docs/SETUP.md`'s depot workflow). `depot_collection_failed` means the
+depot chest was empty or missing when the worker tried to
+`turtle.suck()` from it -- restock it, then `resume` (the worker
+re-attempts collection from wherever it's standing, same as any other
+`ERROR` recovery). `insufficient_fuel_for_transit` means it collected
+some fuel but still not enough to reach `starting_position` -- restock
+more generously (see `docs/LIMITATIONS.md`'s note on `turtle.suck()`/
+`turtle.refuel()` both working in whole-stack units) and `resume`.
+`resume` correctly returns to `COLLECTING_RESOURCES` or
+`NAVIGATING_TO_START` (whichever was interrupted), not straight to
+mining -- see `worker.lua`'s `resumeTargetState`.
+
 ## A worker is stuck in `ERROR`
 
 See `docs/RECOVERY.md`'s "Worker stuck in ERROR" and "GPS position

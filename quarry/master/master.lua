@@ -20,6 +20,9 @@ local comms = require("comms")
 local persistence = require("persistence")
 local validation = require("validation")
 local logging = require("logging")
+local directions = require("directions")
+
+local FACING_BY_NAME = { north = 0, east = 1, south = 2, west = 3 }
 
 local STATE_PATH = "master_state"
 local HEARTBEAT_TIMEOUT = 15      -- seconds without a heartbeat before "missed"
@@ -160,6 +163,13 @@ function commands.new()
     local uz = askInt("unload point Z", 0)
     local udir = askStr("unload direction (forward/up/down)", "forward")
     cfg.unloadPoint = { x = ux, y = uy, z = uz, direction = udir }
+    if askStr("configure a shared depot for auto-placement/auto-fuel? (y/n)", "n") == "y" then
+        local dx = askInt("depot X", 0)
+        local dy = askInt("depot Y", 0)
+        local dz = askInt("depot Z", 0)
+        local dfacing = askStr("depot facing (north/east/south/west)", "north")
+        cfg.depotPoint = { x = dx, y = dy, z = dz, facing = FACING_BY_NAME[dfacing] or 0 }
+    end
     cfg.cleanupPass = (askStr("perform cleanup pass? (y/n)", "n") == "y")
     cfg.protocolVersion = protocol.VERSION
 
@@ -181,6 +191,12 @@ function commands.show()
     print("Fuel reserve: " .. cfg.fuelReserve .. "   Inventory threshold: " .. cfg.inventoryReturnThreshold)
     print("Liquid policy: " .. cfg.liquidPolicy .. "   Cleanup pass: " .. tostring(cfg.cleanupPass))
     print(string.format("Unload point: (%d,%d,%d) facing %s", cfg.unloadPoint.x, cfg.unloadPoint.y, cfg.unloadPoint.z, cfg.unloadPoint.direction))
+    if cfg.depotPoint then
+        local dp = cfg.depotPoint
+        print(string.format("Depot: (%d,%d,%d) facing %s", dp.x, dp.y, dp.z, directions.name(dp.facing)))
+    else
+        print("Depot: not configured (workers must be placed exactly at their starting_position)")
+    end
     if state.jobId then print("Active job: " .. state.jobId) end
 end
 
@@ -266,6 +282,7 @@ function commands.deploy()
                 liquidPolicy = cfgCopy.liquidPolicy,
                 ignoredBlocks = cfgCopy.ignoredBlocks,
                 unloadPoint = cfgCopy.unloadPoint,
+                depotPoint = cfgCopy.depotPoint,
             },
         }
         state.slotWorker[i] = workerId

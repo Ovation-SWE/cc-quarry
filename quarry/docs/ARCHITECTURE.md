@@ -267,11 +267,11 @@ flags) and instantiated in `worker/worker.lua`:
 
 ```
 BOOT -> REGISTERING -> WAITING_FOR_JOB -> VALIDATING_JOB -> ASSIGNED
-  -> NAVIGATING_TO_START -> MINING <-> INVENTORY_RETURN
-                                    <-> FUEL_RETURN
+  -> [COLLECTING_RESOURCES ->] NAVIGATING_TO_START -> MINING <-> INVENTORY_RETURN
+                                                            <-> FUEL_RETURN
      MINING -> COMPLETED
-     (any)   -> PAUSED -> MINING (on RESUME)
-     (any)   -> ERROR -> MINING (on RESUME, operator-confirmed)
+     (any)   -> PAUSED -> (the state it was interrupted from, on RESUME)
+     (any)   -> ERROR -> (the state it was interrupted from, on RESUME, operator-confirmed)
      (any)   -> EMERGENCY_STOP (terminal until a new job is assigned)
      BOOT    -> RECOVERING -> (whichever state was persisted)
 ```
@@ -281,6 +281,26 @@ and accepted a job does **not** start moving on its own. It waits for
 an explicit `start` command from the master (a distinct, confirmed
 step from `deploy`), matching the requirement that starting a
 destructive quarry job requires a clear, separate confirmation.
+
+`COLLECTING_RESOURCES` only exists when the job configures a
+`depotPoint` (optional; see `docs/SETUP.md`'s depot workflow) -- it's
+skipped entirely otherwise, going straight from `ASSIGNED` to
+`NAVIGATING_TO_START` exactly as before that feature existed. When
+present, `buildSubsystems` seeds dead reckoning at the depot instead of
+`starting_position`, this state tops up fuel there
+(`turtle.suck()`, which costs no fuel), and `NAVIGATING_TO_START`
+performs a real journey from the depot to `starting_position` (using a
+partition-free mining instance for that leg -- see
+`docs/LIMITATIONS.md`) instead of the no-op it is without a depot
+(where the worker is trusted to already be standing at
+`starting_position`).
+
+`RESUME` after `PAUSED`/`ERROR` returns to whichever state was
+actually interrupted (read off `lib/state_machine.lua`'s own
+transition history, `worker.lua`'s `resumeTargetState`), not
+unconditionally to `MINING` -- necessary once `COLLECTING_RESOURCES`/
+`NAVIGATING_TO_START` became real multi-step processes that can
+themselves error out (an empty depot, a blocked transit path).
 
 ## Communication protocol ("quarry.v1")
 

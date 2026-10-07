@@ -63,6 +63,7 @@ local answers = {
     "STOP_AT_LIQUID", -- liquidPolicy
     "0", "10", "0",   -- unload point x y z
     "down",           -- unload direction
+    "n",              -- configure a depot? (no -- see the depot-specific check below)
     "n",              -- cleanup pass
     "CONFIRM",        -- deploy confirmation
     "CONFIRM",        -- start confirmation
@@ -174,6 +175,36 @@ local statusMsg = protocol.build({
 })
 hooks.handleMessage(WORKER_ID, statusMsg)
 check(hooks.state.workers[WORKER_ID].last.progress == 0.5, "heartbeat updates the worker's recorded progress")
+
+-- Depot configuration (opt-in): run `new` again with a fresh scripted
+-- "yes" answer for the new depot prompt, verifying it's parsed and
+-- stored correctly. Run last so it can't disturb the already-deployed
+-- job checked above (commands.new() resets state.partitions/deployed).
+do
+    local depotAnswers = {
+        "0", "0", "0", "2", "0", "0",
+        "1", "200", "0.9", "STOP_AT_LIQUID",
+        "0", "10", "0", "down",
+        "y",            -- configure a depot? yes
+        "5", "64", "5", -- depot x y z
+        "east",         -- depot facing
+        "n",            -- cleanup pass
+    }
+    local depotIdx = 0
+    _G.read = function()
+        depotIdx = depotIdx + 1
+        local a = depotAnswers[depotIdx]
+        if a == nil then error("test ran out of scripted depot answers at index " .. depotIdx) end
+        return a
+    end
+    hooks.commands.new()
+    check(hooks.state.config.depotPoint ~= nil, "depot prompt 'y' populates state.config.depotPoint")
+    check(hooks.state.config.depotPoint.x == 5 and hooks.state.config.depotPoint.y == 64
+        and hooks.state.config.depotPoint.z == 5, "depot coordinates recorded correctly")
+    check(hooks.state.config.depotPoint.facing == 1, "depot facing name 'east' converted to the numeric convention (1)")
+    local depotOk, depotErrs = require("validation").validateConfig(hooks.state.config, { availableWorkers = 1 })
+    check(depotOk == true, "config with a depot configured is still valid: " .. table.concat(depotErrs or {}, "; "))
+end
 
 print(string.format("\n%d checks, %d failures", checks, failures))
 if failures > 0 then os.exit(1) end
